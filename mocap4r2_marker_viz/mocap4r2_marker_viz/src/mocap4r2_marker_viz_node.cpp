@@ -15,19 +15,14 @@
 // Author: David Vargas Frutos <david.vargas@urjc.es>
 // Author: Jose Miguel Guerrero Hernandez <josemiguel.guerrero@urjc.es>
 
-#include <string>
-
 #include "mocap4r2_marker_viz/mocap4r2_marker_viz_node.hpp"
+
+#include <string>
 
 using std::placeholders::_1;
 using namespace std::chrono_literals;
 
-MarkerVisualizer::MarkerVisualizer()
-: Node("marker_visualizer")
-{
-  publisher_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-    "visualization_marker", 1000);
-
+MarkerVisualizer::MarkerVisualizer() : Node("marker_visualizer") {
   declare_parameter<float>("default_marker_color_r", 0.0f);
   declare_parameter<float>("default_marker_color_g", 1.0f);
   declare_parameter<float>("default_marker_color_b", 0.0f);
@@ -38,6 +33,8 @@ MarkerVisualizer::MarkerVisualizer()
   declare_parameter<float>("marker_lifetime", 0.01f);
   declare_parameter<std::string>("namespace", "mocap4r2_markers");
   declare_parameter<std::string>("mocap4r2_system", "optitrack");
+  declare_parameter<std::vector<std::string>>("marker_topics", {"markers"});
+  declare_parameter<std::vector<std::string>>("rb_topics", {"rigid_bodies"});
 
   get_parameter<float>("default_marker_color_r", default_marker_color_.r);
   get_parameter<float>("default_marker_color_g", default_marker_color_.g);
@@ -49,32 +46,41 @@ MarkerVisualizer::MarkerVisualizer()
   get_parameter<float>("marker_lifetime", marker_lifetime_);
   get_parameter<std::string>("namespace", namespace_);
   get_parameter<std::string>("mocap4r2_system", mocap4r2_system_);
+  get_parameter<std::vector<std::string>>("marker_topics", marker_topics_);
+  get_parameter<std::vector<std::string>>("rb_topics", rb_topics_);
 
-  markers_subscription_ = this->create_subscription<mocap4r2_msgs::msg::Markers>(
-    "markers", 1000, std::bind(&MarkerVisualizer::marker_callback, this, _1));
+  for (const auto& topic : marker_topics_) {
+    marker_publishers_[topic] =
+        this->create_publisher<visualization_msgs::msg::MarkerArray>(
+            topic + "_viz", 1000);
+    markers_subscriptions_[topic] =
+        this->create_subscription<mocap4r2_msgs::msg::Markers>(
+            topic, 1000,
+            [this, topic](const mocap4r2_msgs::msg::Markers::SharedPtr msg) {
+              MarkerVisualizer::marker_callback(topic, msg);
+            });
+  }
 
-  // Rigid bodies
-  markers_subscription_rb_ = this->create_subscription<mocap4r2_msgs::msg::RigidBodies>(
-    "rigid_bodies", 1000, std::bind(&MarkerVisualizer::rb_callback, this, _1));
-
-  publisher_rb_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-    "visualization_marker_rb", 1000);
+  for (const auto& topic : rb_topics_) {
+    rb_publishers_[topic] =
+        this->create_publisher<visualization_msgs::msg::MarkerArray>(
+            topic + "_viz", 1000);
+    rb_subscriptions_[topic] =
+        this->create_subscription<mocap4r2_msgs::msg::RigidBodies>(
+            topic, 1000,
+            [this,
+             topic](const mocap4r2_msgs::msg::RigidBodies::SharedPtr msg) {
+              MarkerVisualizer::rb_callback(topic, msg);
+            });
+  }
 }
 
-
 // This function change mocap axis to match with rviz axis
-geometry_msgs::msg::Pose MarkerVisualizer::mocap2rviz(const geometry_msgs::msg::Pose mocap4r2_pose)
-const
-{
+geometry_msgs::msg::Pose MarkerVisualizer::mocap2rviz(
+    const geometry_msgs::msg::Pose mocap4r2_pose) const {
   geometry_msgs::msg::Pose rviz_pose;
   if (mocap4r2_system_ == "optitrack") {
-    rviz_pose.position.x = -mocap4r2_pose.position.y;
-    rviz_pose.position.y = mocap4r2_pose.position.x;
-    rviz_pose.position.z = mocap4r2_pose.position.z;
-    rviz_pose.orientation.x = mocap4r2_pose.orientation.x;
-    rviz_pose.orientation.y = -mocap4r2_pose.orientation.y;
-    rviz_pose.orientation.z = mocap4r2_pose.orientation.z;
-    rviz_pose.orientation.w = mocap4r2_pose.orientation.w;
+    rviz_pose = mocap4r2_pose;
   } else if (mocap4r2_system_ == "vicon") {
     // TO-DO:
     rviz_pose = mocap4r2_pose;
@@ -87,27 +93,27 @@ const
   return rviz_pose;
 }
 
-
-void
-MarkerVisualizer::marker_callback(const mocap4r2_msgs::msg::Markers::SharedPtr msg) const
-{
-  if (publisher_->get_subscription_count() == 0) {
+void MarkerVisualizer::marker_callback(
+    const std::string& topic,
+    const mocap4r2_msgs::msg::Markers::SharedPtr msg) const {
+  auto publisher = marker_publishers_.at(topic);
+  if (publisher->get_subscription_count() == 0) {
     return;
   }
 
   static int counter = 0;
   visualization_msgs::msg::MarkerArray visual_markers;
-  for (const mocap4r2_msgs::msg::Marker & marker : msg->markers) {
-    visual_markers.markers.push_back(marker2visual(counter++, marker.translation, msg->header));
+  for (const mocap4r2_msgs::msg::Marker& marker : msg->markers) {
+    visual_markers.markers.push_back(
+        marker2visual(counter++, marker.translation, msg->header));
   }
-  publisher_->publish(visual_markers);
+  publisher->publish(visual_markers);
 }
 
 visualization_msgs::msg::Marker
-MarkerVisualizer::marker2visual(
-  int index, const geometry_msgs::msg::Point & translation,
-  const std_msgs::msg::Header & header) const
-{
+MarkerVisualizer::marker2visual(int index,
+                                const geometry_msgs::msg::Point& translation,
+                                const std_msgs::msg::Header& header) const {
   visualization_msgs::msg::Marker viz_marker;
   viz_marker.header = header;
   viz_marker.ns = namespace_;
@@ -128,11 +134,11 @@ MarkerVisualizer::marker2visual(
   return viz_marker;
 }
 
-
-void
-MarkerVisualizer::rb_callback(const mocap4r2_msgs::msg::RigidBodies::SharedPtr msg) const
-{
-  if (publisher_rb_->get_subscription_count() == 0) {
+void MarkerVisualizer::rb_callback(
+    const std::string& topic,
+    const mocap4r2_msgs::msg::RigidBodies::SharedPtr msg) const {
+  auto publisher = rb_publishers_.at(topic);
+  if (publisher->get_subscription_count() == 0) {
     return;
   }
 
@@ -140,26 +146,22 @@ MarkerVisualizer::rb_callback(const mocap4r2_msgs::msg::RigidBodies::SharedPtr m
   static int counter_markers_rb = 0;
   visualization_msgs::msg::MarkerArray visual_markers_rb;
 
-  for (const mocap4r2_msgs::msg::RigidBody & rb : msg->rigidbodies) {
-    visual_markers_rb.markers.push_back(rb2visual(counter_rb++, rb.pose, msg->header));
+  for (const mocap4r2_msgs::msg::RigidBody& rb : msg->rigidbodies) {
+    visual_markers_rb.markers.push_back(
+        rb2visual(counter_rb++, rb.pose, msg->header));
 
-    for (const mocap4r2_msgs::msg::Marker & marker : rb.markers) {
+    for (const mocap4r2_msgs::msg::Marker& marker : rb.markers) {
       visual_markers_rb.markers.push_back(
-        marker2visual(
-          counter_markers_rb++,
-          marker.translation, msg->header));
+          marker2visual(counter_markers_rb++, marker.translation, msg->header));
     }
   }
 
-  publisher_rb_->publish(visual_markers_rb);
+  publisher->publish(visual_markers_rb);
 }
 
-
 visualization_msgs::msg::Marker
-MarkerVisualizer::rb2visual(
-  int index, const geometry_msgs::msg::Pose & poserb,
-  const std_msgs::msg::Header & header) const
-{
+MarkerVisualizer::rb2visual(int index, const geometry_msgs::msg::Pose& poserb,
+                            const std_msgs::msg::Header& header) const {
   visualization_msgs::msg::Marker viz_marker;
   viz_marker.header = header;
   viz_marker.ns = namespace_;

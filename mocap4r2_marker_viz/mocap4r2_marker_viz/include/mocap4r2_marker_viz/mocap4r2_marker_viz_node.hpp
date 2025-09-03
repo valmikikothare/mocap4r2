@@ -19,54 +19,71 @@
 #define MOCAP4R2_MARKER_VIZ__MOCAP4R2_MARKER_VIZ_NODE_HPP_
 
 #include <chrono>
-#include <memory>
 #include <map>
+#include <memory>
 #include <string>
 
+#include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
+#include "geometry_msgs/msg/vector3.hpp"
+#include "mocap4r2_marker_viz_srvs/srv/reset_marker_color.hpp"
+#include "mocap4r2_marker_viz_srvs/srv/set_marker_color.hpp"
+#include "mocap4r2_msgs/msg/marker.hpp"
+#include "mocap4r2_msgs/msg/markers.hpp"
+#include "mocap4r2_msgs/msg/rigid_bodies.hpp"
+#include "mocap4r2_msgs/msg/rigid_body.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 
-#include "mocap4r2_msgs/msg/marker.hpp"
-#include "mocap4r2_msgs/msg/markers.hpp"
-#include "mocap4r2_msgs/msg/rigid_body.hpp"
-#include "mocap4r2_msgs/msg/rigid_bodies.hpp"
-#include "geometry_msgs/msg/vector3.hpp"
-#include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
-#include "mocap4r2_marker_viz_srvs/srv/set_marker_color.hpp"
-#include "mocap4r2_marker_viz_srvs/srv/reset_marker_color.hpp"
-
 typedef mocap4r2_marker_viz_srvs::srv::SetMarkerColor SetMarkerColor;
 typedef mocap4r2_marker_viz_srvs::srv::ResetMarkerColor ResetMarkerColor;
-typedef std::shared_ptr<mocap4r2_marker_viz_srvs::srv::SetMarkerColor::Request> SetRequest;
-typedef std::shared_ptr<mocap4r2_marker_viz_srvs::srv::SetMarkerColor::Response> SetResponse;
-typedef std::shared_ptr<mocap4r2_marker_viz_srvs::srv::ResetMarkerColor::Request> ResetRequest;
-typedef std::shared_ptr<mocap4r2_marker_viz_srvs::srv::ResetMarkerColor::Response> ResetResponse;
+typedef std::shared_ptr<mocap4r2_marker_viz_srvs::srv::SetMarkerColor::Request>
+    SetRequest;
+typedef std::shared_ptr<mocap4r2_marker_viz_srvs::srv::SetMarkerColor::Response>
+    SetResponse;
+typedef std::shared_ptr<
+    mocap4r2_marker_viz_srvs::srv::ResetMarkerColor::Request>
+    ResetRequest;
+typedef std::shared_ptr<
+    mocap4r2_marker_viz_srvs::srv::ResetMarkerColor::Response>
+    ResetResponse;
 
-class MarkerVisualizer : public rclcpp::Node
-{
-public:
+class MarkerVisualizer : public rclcpp::Node {
+ public:
   MarkerVisualizer();
 
-private:
-  void marker_callback(const mocap4r2_msgs::msg::Markers::SharedPtr msg) const;
-  void rb_callback(const mocap4r2_msgs::msg::RigidBodies::SharedPtr msg) const;
+ private:
+  void marker_callback(const std::string& topic,
+                       const mocap4r2_msgs::msg::Markers::SharedPtr msg) const;
+  void rb_callback(const std::string& topic,
+                   const mocap4r2_msgs::msg::RigidBodies::SharedPtr msg) const;
 
-  visualization_msgs::msg::Marker marker2visual(
-    int index, const geometry_msgs::msg::Point & translation,
-    const std_msgs::msg::Header & header) const;
+  visualization_msgs::msg::Marker
+  marker2visual(int index, const geometry_msgs::msg::Point& translation,
+                const std_msgs::msg::Header& header) const;
 
-  visualization_msgs::msg::Marker rb2visual(
-    int index, const geometry_msgs::msg::Pose & poserb,
-    const std_msgs::msg::Header & header) const;
+  visualization_msgs::msg::Marker
+  rb2visual(int index, const geometry_msgs::msg::Pose& poserb,
+            const std_msgs::msg::Header& header) const;
 
-  geometry_msgs::msg::Pose mocap2rviz(const geometry_msgs::msg::Pose mocap4r2_pose) const;
+  geometry_msgs::msg::Pose
+  mocap2rviz(const geometry_msgs::msg::Pose mocap4r2_pose) const;
 
-  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr publisher_;
-  rclcpp::Subscription<mocap4r2_msgs::msg::Markers>::SharedPtr markers_subscription_;
+  std::map<std::string,
+           rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr>
+      marker_publishers_;
+  std::map<std::string,
+           rclcpp::Subscription<mocap4r2_msgs::msg::Markers>::SharedPtr>
+      markers_subscriptions_;
 
-  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr publisher_rb_;
-  rclcpp::Subscription<mocap4r2_msgs::msg::RigidBodies>::SharedPtr markers_subscription_rb_;
+  std::map<std::string,
+           rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr>
+      rb_publishers_;
+  std::map<std::string,
+           rclcpp::Subscription<mocap4r2_msgs::msg::RigidBodies>::SharedPtr>
+      rb_subscriptions_;
 
+  std::vector<std::string> marker_topics_;
+  std::vector<std::string> rb_topics_;
   geometry_msgs::msg::Vector3 marker_scale_;
   float marker_lifetime_;
   std::string namespace_;
@@ -75,4 +92,4 @@ private:
   std::map<int, std_msgs::msg::ColorRGBA> marker_color_;
 };
 
-#endif  // MOCAP4R2_MARKER_VIZ__MOCAP4R2_MARKER_VIZ_NODE_HPP_
+#endif // MOCAP4R2_MARKER_VIZ__MOCAP4R2_MARKER_VIZ_NODE_HPP_
