@@ -18,34 +18,39 @@
 #include "mocap4r2_marker_viz/mocap4r2_marker_viz_node.hpp"
 
 #include <string>
-#include <random>
 
 using std::placeholders::_1;
 using namespace std::chrono_literals;
 
 MarkerVisualizer::MarkerVisualizer() : Node("marker_visualizer")
 {
-  declare_parameter<double>("marker_scale_x", 0.014f);
-  declare_parameter<double>("marker_scale_y", 0.014f);
-  declare_parameter<double>("marker_scale_z", 0.014f);
-  declare_parameter<float>("marker_lifetime", 0.01f);
   declare_parameter<std::string>("namespace", "mocap4r2_markers");
   declare_parameter<std::string>("mocap4r2_system", "optitrack");
   declare_parameter<std::vector<std::string>>("marker_topics", { "markers" });
   declare_parameter<std::vector<std::string>>("rb_topics", { "rigid_bodies" });
+  declare_parameter<double>("marker_scale_x", 0.014f);
+  declare_parameter<double>("marker_scale_y", 0.014f);
+  declare_parameter<double>("marker_scale_z", 0.014f);
+  declare_parameter<float>("marker_lifetime", 0.01f);
+  declare_parameter<double>("rb_scale_x", 0.1f);
+  declare_parameter<double>("rb_scale_y", 0.014f);
+  declare_parameter<double>("rb_scale_z", 0.014f);
+  declare_parameter<float>("rb_lifetime", 0.01f);
+  declare_parameter<bool>("rb_require_markers", false);
 
-  get_parameter<double>("marker_scale_x", marker_scale_.x);
-  get_parameter<double>("marker_scale_y", marker_scale_.y);
-  get_parameter<double>("marker_scale_z", marker_scale_.z);
-  get_parameter<float>("marker_lifetime", marker_lifetime_);
   get_parameter<std::string>("namespace", namespace_);
   get_parameter<std::string>("mocap4r2_system", mocap4r2_system_);
   get_parameter<std::vector<std::string>>("marker_topics", marker_topics_);
   get_parameter<std::vector<std::string>>("rb_topics", rb_topics_);
-
-  unsigned seed = 0;
-  std::mt19937 generator(seed);
-  std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
+  get_parameter<double>("marker_scale_x", marker_scale_.x);
+  get_parameter<double>("marker_scale_y", marker_scale_.y);
+  get_parameter<double>("marker_scale_z", marker_scale_.z);
+  get_parameter<float>("marker_lifetime", marker_lifetime_);
+  get_parameter<double>("rb_scale_x", rb_scale_.x);
+  get_parameter<double>("rb_scale_y", rb_scale_.y);
+  get_parameter<double>("rb_scale_z", rb_scale_.z);
+  get_parameter<float>("rb_lifetime", rb_lifetime_);
+  get_parameter<bool>("rb_require_markers", rb_require_markers_);
 
   for (const auto& topic : marker_topics_)
   {
@@ -54,11 +59,16 @@ MarkerVisualizer::MarkerVisualizer() : Node("marker_visualizer")
         topic, 1000, [this, topic](const mocap4r2_msgs::msg::Markers::SharedPtr msg) {
           MarkerVisualizer::marker_callback(topic, msg);
         });
+
+    declare_parameter<float>("marker_colors." + topic + ".r", 0.0f);
+    declare_parameter<float>("marker_colors." + topic + ".g", 1.0f);
+    declare_parameter<float>("marker_colors." + topic + ".b", 0.0f);
+    declare_parameter<float>("marker_colors." + topic + ".a", 1.0f);
     std_msgs::msg::ColorRGBA color;
-    color.r = distribution(generator);
-    color.g = distribution(generator);
-    color.b = distribution(generator);
-    color.a = 1.0;
+    get_parameter<float>("marker_colors." + topic + ".r", color.r);
+    get_parameter<float>("marker_colors." + topic + ".g", color.g);
+    get_parameter<float>("marker_colors." + topic + ".b", color.b);
+    get_parameter<float>("marker_colors." + topic + ".a", color.a);
     marker_colors_[topic] = color;
   }
 
@@ -69,42 +79,52 @@ MarkerVisualizer::MarkerVisualizer() : Node("marker_visualizer")
         topic, 1000, [this, topic](const mocap4r2_msgs::msg::RigidBodies::SharedPtr msg) {
           MarkerVisualizer::rb_callback(topic, msg);
         });
+
+    declare_parameter<float>("marker_colors." + topic + ".r", 1.0f);
+    declare_parameter<float>("marker_colors." + topic + ".g", 0.0f);
+    declare_parameter<float>("marker_colors." + topic + ".b", 0.0f);
+    declare_parameter<float>("marker_colors." + topic + ".a", 1.0f);
     std_msgs::msg::ColorRGBA marker_color;
-    marker_color.r = distribution(generator);
-    marker_color.g = distribution(generator);
-    marker_color.b = distribution(generator);
-    marker_color.a = 1.0;
+    get_parameter<float>("marker_colors." + topic + ".r", marker_color.r);
+    get_parameter<float>("marker_colors." + topic + ".g", marker_color.g);
+    get_parameter<float>("marker_colors." + topic + ".b", marker_color.b);
+    get_parameter<float>("marker_colors." + topic + ".a", marker_color.a);
     marker_colors_[topic] = marker_color;
+
+    declare_parameter<float>("rb_colors." + topic + ".r", 0.0f);
+    declare_parameter<float>("rb_colors." + topic + ".g", 0.0f);
+    declare_parameter<float>("rb_colors." + topic + ".b", 1.0f);
+    declare_parameter<float>("rb_colors." + topic + ".a", 1.0f);
     std_msgs::msg::ColorRGBA rb_color;
-    rb_color.r = distribution(generator);
-    rb_color.g = distribution(generator);
-    rb_color.b = distribution(generator);
-    rb_color.a = 1.0;
-    marker_colors_[topic] = rb_color;
+    get_parameter<float>("rb_colors." + topic + ".r", rb_color.r);
+    get_parameter<float>("rb_colors." + topic + ".g", rb_color.g);
+    get_parameter<float>("rb_colors." + topic + ".b", rb_color.b);
+    get_parameter<float>("rb_colors." + topic + ".a", rb_color.a);
+    rb_colors_[topic] = rb_color;
   }
 }
 
 // This function change mocap axis to match with rviz axis
-geometry_msgs::msg::Pose MarkerVisualizer::mocap2rviz(const geometry_msgs::msg::Pose mocap4r2_pose) const
+geometry_msgs::msg::Pose MarkerVisualizer::mocap2rviz(const geometry_msgs::msg::Pose pose) const
 {
   geometry_msgs::msg::Pose rviz_pose;
   if (mocap4r2_system_ == "optitrack")
   {
-    rviz_pose = mocap4r2_pose;
+    rviz_pose = pose;
   }
   else if (mocap4r2_system_ == "vicon")
   {
     // TO-DO:
-    rviz_pose = mocap4r2_pose;
+    rviz_pose = pose;
   }
   else if (mocap4r2_system_ == "qualisys")
   {
     // TO-DO:
-    rviz_pose = mocap4r2_pose;
+    rviz_pose = pose;
   }
   else
   {
-    rviz_pose = mocap4r2_pose;
+    rviz_pose = pose;
   }
   return rviz_pose;
 }
@@ -164,6 +184,11 @@ void MarkerVisualizer::rb_callback(const std::string& topic, const mocap4r2_msgs
 
   for (const mocap4r2_msgs::msg::RigidBody& rb : msg->rigidbodies)
   {
+    if (rb_require_markers_ && rb.markers.empty())
+    {
+      continue;
+    }
+
     visual_markers_rb.markers.push_back(rb2visual(topic, counter_rb++, rb.pose, msg->header));
 
     for (const mocap4r2_msgs::msg::Marker& marker : rb.markers)
@@ -176,7 +201,7 @@ void MarkerVisualizer::rb_callback(const std::string& topic, const mocap4r2_msgs
 }
 
 visualization_msgs::msg::Marker MarkerVisualizer::rb2visual(const std::string& topic, int index,
-                                                            const geometry_msgs::msg::Pose& poserb,
+                                                            const geometry_msgs::msg::Pose& pose,
                                                             const std_msgs::msg::Header& header) const
 {
   visualization_msgs::msg::Marker viz_marker;
@@ -188,13 +213,9 @@ visualization_msgs::msg::Marker MarkerVisualizer::rb2visual(const std::string& t
   viz_marker.action = visualization_msgs::msg::Marker::ADD;
 
   // Change mocap system axis to rviz axis
-  viz_marker.pose = mocap2rviz(poserb);
+  viz_marker.pose = mocap2rviz(pose);
 
-  geometry_msgs::msg::Vector3 marker_scale_;
-  marker_scale_.x = 0.5f;
-  marker_scale_.y = 0.014f;
-  marker_scale_.z = 0.014f;
-  viz_marker.scale = marker_scale_;
-  viz_marker.lifetime = rclcpp::Duration::from_seconds(marker_lifetime_);
+  viz_marker.scale = rb_scale_;
+  viz_marker.lifetime = rclcpp::Duration::from_seconds(rb_lifetime_);
   return viz_marker;
 }

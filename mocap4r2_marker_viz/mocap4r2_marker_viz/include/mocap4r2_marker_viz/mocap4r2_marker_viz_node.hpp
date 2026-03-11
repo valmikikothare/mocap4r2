@@ -54,10 +54,10 @@ private:
                                                 const geometry_msgs::msg::Point& translation,
                                                 const std_msgs::msg::Header& header) const;
 
-  visualization_msgs::msg::Marker rb2visual(const std::string& topic, int index, const geometry_msgs::msg::Pose& poserb,
+  visualization_msgs::msg::Marker rb2visual(const std::string& topic, int index, const geometry_msgs::msg::Pose& pose,
                                             const std_msgs::msg::Header& header) const;
 
-  geometry_msgs::msg::Pose mocap2rviz(const geometry_msgs::msg::Pose mocap4r2_pose) const;
+  geometry_msgs::msg::Pose mocap2rviz(const geometry_msgs::msg::Pose pose) const;
 
   std::map<std::string, rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr> marker_publishers_;
   std::map<std::string, rclcpp::Subscription<mocap4r2_msgs::msg::Markers>::SharedPtr> markers_subscriptions_;
@@ -65,16 +65,17 @@ private:
   std::map<std::string, rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr> rb_publishers_;
   std::map<std::string, rclcpp::Subscription<mocap4r2_msgs::msg::RigidBodies>::SharedPtr> rb_subscriptions_;
 
-  std::map<std::string, std_msgs::msg::ColorRGBA> marker_colors_;
-  std::map<std::string, std_msgs::msg::ColorRGBA> rb_colors_;
-
+  std::string namespace_;
+  std::string mocap4r2_system_;
   std::vector<std::string> marker_topics_;
   std::vector<std::string> rb_topics_;
   geometry_msgs::msg::Vector3 marker_scale_;
+  geometry_msgs::msg::Vector3 rb_scale_;
   float marker_lifetime_;
-  std::string namespace_;
-  std::string mocap4r2_system_;
-  std_msgs::msg::ColorRGBA default_marker_color_;
+  float rb_lifetime_;
+  bool rb_require_markers_;
+  std::map<std::string, std_msgs::msg::ColorRGBA> marker_colors_;
+  std::map<std::string, std_msgs::msg::ColorRGBA> rb_colors_;
 };
 
 #endif  // MOCAP4R2_MARKER_VIZ__MOCAP4R2_MARKER_VIZ_NODE_HPP_
